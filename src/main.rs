@@ -1,12 +1,39 @@
+use std::env;
+// use std::io;
+use std::io::prelude::*;
+use std::fs::File;
+
 mod huffman;
 
+fn read_file_to_string (filename: &str) -> String {
+  let mut input_string = String::new();
+
+  let mut f = match File::open(filename) {
+    Ok(file) => file,
+    Err(_) => { panic!("Cannot open input file") }
+  };
+
+  let _ = f.read_to_string(&mut input_string);
+  input_string
+}
+
 fn main() {
-  let input_string = "MISSISSIPPI RIVER";
+  let args: Vec<String> = env::args().collect();
+
+
+  let mut input_string;
+
+  if args.len() > 1 {
+    input_string = read_file_to_string(&args[1]);
+  } else {
+    input_string = "MISSISSIPPI RIVER".to_string();
+  }
+
+  println!("Building codebook");
   let huffman_codebook = huffman::build_huffman_codebook(&input_string);
 
+  println!("Compressing");
   let compressed = huffman::compress(&input_string, &huffman_codebook);
-
-  println!("{:?} compressed as {:?}, with {:?} bits padded", input_string, compressed.bytes, compressed.bits_padded);
 
   let original_size = input_string.len() * 8;
   let compressed_size = compressed.bytes.len() * 8;
