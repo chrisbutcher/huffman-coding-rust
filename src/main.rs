@@ -14,3 +14,8 @@ fn main() {
 
   println!("Compressed bytes size {:?}, from {:?}. Ratio: {:?}", compressed_size, original_size, compression_ratio);
 }
+
+#[test]
+fn test_main() {
+  main();
+}
