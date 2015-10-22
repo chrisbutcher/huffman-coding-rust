@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Less, Equal, Greater};
-use std::collections::VecDeque;
+
+const PROGRESS_FULL_BYTE: u8 = 255u8;
 
 pub struct CompressionResult {
   pub bytes: Vec<u8>,
@@ -66,59 +67,38 @@ pub fn build_huffman_codebook(input: &str) -> HashMap<char,String> {
 
 pub fn compress(input_string: &str, codebook: &HashMap<char,String>) -> CompressionResult {
   let mut output_bytes: Vec<u8> = Vec::new();
+  let mut byte_buffer: u8 = 0u8;
+  let mut progress_byte: u8 = 0u8;
   let mut bits_padded = 0;
-  let mut bit_queue = VecDeque::new();
 
   for ch in input_string.chars() {
     let code = codebook.get(&ch).unwrap();
     for code_ch in code.chars() {
-      bit_queue.push_back(code_ch);
-    }
+      let new_bit = if code_ch == '0' { 0 } else { 1 };
+      byte_buffer = (byte_buffer << 1) | new_bit;
+      progress_byte = (progress_byte << 1) | 1;
 
-    if bit_queue.len() > 8 {
-      let mut new_byte = String::from("");
-      for _ in 0..8 {
-        let code_ch = bit_queue.pop_front().unwrap();
-        new_byte = format!("{}{}", new_byte, code_ch);
+      if progress_byte == PROGRESS_FULL_BYTE {
+        let byte_to_push = byte_buffer;
+        output_bytes.push(byte_to_push);
+        progress_byte = 0u8;
       }
-
-      let new_byte_u8 = binary_str_to_u8(&new_byte);
-      output_bytes.push(new_byte_u8);
     }
   }
 
-  if bit_queue.len() > 0 {
-    bits_padded = 8 -  bit_queue.len();
-
-    let mut new_byte = String::from("");
-    for _ in 0..8 {
-      match bit_queue.pop_front() {
-        Some(code_ch) => new_byte = format!("{}{}", new_byte, code_ch),
-        None => new_byte = format!("{}{}", new_byte, "0")
-      }
+  if progress_byte.leading_zeros() > 0 {
+    bits_padded = 8 - (8 - progress_byte.leading_zeros()) % 8;
+    for _ in 0..bits_padded {
+      byte_buffer = (byte_buffer << 1) | 0;
     }
 
-    let new_byte_u8 = binary_str_to_u8(&new_byte);
-    output_bytes.push(new_byte_u8);
+    output_bytes.push(byte_buffer);
   }
 
   CompressionResult {
     bytes: output_bytes,
     bits_padded: (bits_padded as u8)
   }
-}
-
-fn binary_str_to_u8(binary_str: &str) -> u8 {
-  let mut result = 0u8;
-  for ch in binary_str.chars() {
-    if ch == '0' {
-      result = (result << 1) | 0;
-    } else {
-      result = (result << 1) | 1;
-    }
-  }
-
-  result
 }
 
 fn map_chars_to_frequency(input_string: &str) -> HashMap<char, usize> {

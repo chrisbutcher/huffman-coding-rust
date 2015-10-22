@@ -1,5 +1,4 @@
 use std::env;
-// use std::io;
 use std::io::prelude::*;
 use std::fs::File;
 
@@ -8,26 +7,23 @@ mod huffman;
 fn read_file_to_string (filename: &str) -> String {
   let mut input_string = String::new();
 
-  let mut f = match File::open(filename) {
-    Ok(file) => file,
+  let mut file = match File::open(filename) {
+    Ok(f) => f,
     Err(_) => { panic!("Cannot open input file") }
   };
 
-  let _ = f.read_to_string(&mut input_string);
+  let _ = file.read_to_string(&mut input_string);
   input_string
 }
 
 fn main() {
   let args: Vec<String> = env::args().collect();
 
-
-  let mut input_string;
-
-  if args.len() > 1 {
-    input_string = read_file_to_string(&args[1]);
+  let input_string = if args.len() > 1 {
+    read_file_to_string(&args[1])
   } else {
-    input_string = "MISSISSIPPI RIVER".to_string();
-  }
+    "MISSISSIPPI RIVER".to_string()
+  };
 
   println!("Building codebook");
   let huffman_codebook = huffman::build_huffman_codebook(&input_string);
