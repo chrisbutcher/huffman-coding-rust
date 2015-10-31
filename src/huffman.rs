@@ -4,9 +4,11 @@ use std::collections::HashMap;
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Less, Equal, Greater};
+use std::thread;
 
 const PROGRESS_FULL_BYTE: u8 = 255u8;
 
+#[derive(Debug)]
 pub struct CompressionResult {
   pub bytes: Vec<u8>,
   pub bits_padded: u8
@@ -65,6 +67,29 @@ pub fn build_huffman_codebook(input: &str) -> HashMap<char,String> {
   codebook
 }
 
+// TODO: Output file layout. Header indicating number of blocks, offsets to them, offset to dictionary
+// [header][dictionary][block0][block1][block2][block3]
+
+pub fn parallel_compress(input_string: &str, codebook: &HashMap<char,String>, thread_count: usize) -> Vec<CompressionResult> {
+  let substrings = parallel_divide_work(thread_count, &input_string);
+  let mut threads = vec![];
+
+  for substring in substrings {
+    let owned_codebook = codebook.to_owned();
+    threads.push(thread::spawn(move || {
+      compress(&substring, &owned_codebook)
+    }));
+  }
+
+  let mut results = vec![];
+  for thread in threads {
+    let result = thread.join().unwrap();
+    results.push(result);
+  }
+
+  results
+}
+
 pub fn compress(input_string: &str, codebook: &HashMap<char,String>) -> CompressionResult {
   let mut output_bytes: Vec<u8> = Vec::new();
   let mut byte_buffer: u8 = 0u8;
@@ -86,7 +111,7 @@ pub fn compress(input_string: &str, codebook: &HashMap<char,String>) -> Compress
     }
   }
 
-  if progress_byte.leading_zeros() > 0 {
+  if progress_byte != 0u8 && progress_byte.leading_zeros() > 0 {
     bits_padded = 8 - (8 - progress_byte.leading_zeros()) % 8;
     for _ in 0..bits_padded {
       byte_buffer = (byte_buffer << 1) | 0;
@@ -158,6 +183,30 @@ fn build_codebook(tree: &Node, codebook: &mut HashMap<char,String>, start_str: &
   }
 }
 
+fn parallel_divide_work(thread_count: usize, input_string: &str) -> Vec<String> {
+  let thread_count = thread_count;
+  let input_string_length = input_string.len();
+  let length_per_thread = input_string_length / thread_count;
+
+  let mut substring_offsets = Vec::with_capacity(thread_count);
+
+  for cpu in 1..thread_count {
+    let offset = cpu * length_per_thread;
+    substring_offsets.push(offset);
+  }
+  substring_offsets.push(input_string_length);
+
+  let mut substrings = vec![];
+  let mut from = 0;
+
+  for substring_offset in substring_offsets {
+    substrings.push(input_string[from..substring_offset].to_string().to_owned());
+    from = substring_offset;
+  }
+
+  substrings
+}
+
 #[test]
 fn test_compress() {
   let mut huffman_codebook = HashMap::<char,String>::new();
@@ -181,6 +230,31 @@ fn test_compress() {
   };
 
   assert_eq!(expected.bytes, result.bytes);
+}
+
+#[test]
+fn test_parallel_compress() {
+  let mut huffman_codebook = HashMap::<char,String>::new();
+  huffman_codebook.insert('S', "00".to_string());
+  huffman_codebook.insert('V', "0110".to_string());
+  huffman_codebook.insert('E', "0111".to_string());
+  huffman_codebook.insert('I', "11".to_string());
+  huffman_codebook.insert('R', "010".to_string());
+  huffman_codebook.insert('M', "1010".to_string());
+  huffman_codebook.insert(' ', "1011".to_string());
+  huffman_codebook.insert('P', "100".to_string());
+
+  let parallel_results = parallel_compress("MISSISSIPPI RIVER", &huffman_codebook, 4);
+
+  let expecteds = vec![compress("MISS", &huffman_codebook),
+                       compress("ISSI", &huffman_codebook),
+                       compress("PPI ", &huffman_codebook),
+                       compress("RIVER", &huffman_codebook)];
+
+  for expected in expecteds {
+      assert_eq!(expected.bytes, parallel_results[i].bytes);
+      assert_eq!(expected.bits_padded, parallel_results[i].bits_padded);
+  }
 }
 
 #[test]
