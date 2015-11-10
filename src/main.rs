@@ -5,8 +5,10 @@ use std::env;
 use std::io::prelude::*;
 use std::fs::File;
 use getopts::Options;
+use std::sync::Arc;
 
-mod huffman;
+mod codebook;
+mod compress;
 
 fn read_file_to_string (filename: &str) -> String {
   let mut input_string = String::new();
@@ -19,6 +21,9 @@ fn read_file_to_string (filename: &str) -> String {
   let _ = file.read_to_string(&mut input_string);
   input_string
 }
+
+// Build codebox - internally, can do character count in parallel [ ]
+// Compress is parallel [x]
 
 fn main() {
   let args: Vec<String> = env::args().collect();
@@ -40,15 +45,15 @@ fn main() {
   };
 
   println!("Building codebook");
-  let huffman_codebook = huffman::build_huffman_codebook(&input_string);
+  let huffman_codebook = codebook::Codebook::new(&input_string);
 
   if option_matches.opt_present("p") {
     println!("Compressing in parallel");
-    let compressed_set = huffman::parallel_compress(&input_string, &huffman_codebook, num_cpus::get());
-    println!("Done!");
+    let compressed_set = compress::parallel_compress(&input_string, Arc::new(huffman_codebook), num_cpus::get());
+    println!("Done! Threads used: {}", compressed_set.len());
   } else {
     println!("Compressing");
-    let compressed = huffman::compress(&input_string, &huffman_codebook);
+    let compressed = compress::compress(&input_string, &huffman_codebook);
     let original_size = input_string.len() * 8;
     let compressed_size = compressed.bytes.len() * 8;
     let compression_ratio = compressed_size as f32 / original_size as f32;
