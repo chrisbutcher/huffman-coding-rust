@@ -5,10 +5,10 @@ use std::env;
 use std::io::prelude::*;
 use std::fs::File;
 use getopts::Options;
-use std::sync::Arc;
 
 mod codebook;
 mod compress;
+mod util;
 
 fn read_file_to_string (filename: &str) -> String {
   let mut input_string = String::new();
@@ -21,9 +21,6 @@ fn read_file_to_string (filename: &str) -> String {
   let _ = file.read_to_string(&mut input_string);
   input_string
 }
-
-// Build codebox - internally, can do character count in parallel [ ]
-// Compress is parallel [x]
 
 fn main() {
   let args: Vec<String> = env::args().collect();
@@ -44,22 +41,19 @@ fn main() {
     "MISSISSIPPI RIVER".to_string()
   };
 
-  println!("Building codebook");
-  let huffman_codebook = codebook::Codebook::new(&input_string);
+  let num_threads = if option_matches.opt_present("p") { num_cpus::get() } else { 1 };
 
-  if option_matches.opt_present("p") {
-    println!("Compressing in parallel");
-    let compressed_set = compress::parallel_compress(&input_string, Arc::new(huffman_codebook), num_cpus::get());
-    println!("Done! Threads used: {}", compressed_set.len());
-  } else {
-    println!("Compressing");
-    let compressed = compress::compress(&input_string, &huffman_codebook);
-    let original_size = input_string.len() * 8;
-    let compressed_size = compressed.bytes.len() * 8;
-    let compression_ratio = compressed_size as f32 / original_size as f32;
+  let input_substrings = util::string_to_substrings(&input_string, num_threads);
+  let huffman_codebook = codebook::Codebook::new(&input_substrings);
+  let compressed_set = compress::parallel_compress(&input_substrings, &huffman_codebook);
+  println!("Done! Threads used: {}", compressed_set.len());
 
-    println!("Compressed bytes size {:?}, from {:?}. Ratio: {:?}", compressed_size, original_size, compression_ratio);
-  }
+  // let huffman_codebook = codebook::Codebook::new(vec![&input_string]);
+  // let compressed = compress::compress(&input_string, &huffman_codebook);
+  // let original_size = input_string.len() * 8;
+  // let compressed_size = compressed.bytes.len() * 8;
+  // let compression_ratio = compressed_size as f32 / original_size as f32;
+  // println!("Compressed bytes size {:?}, from {:?}. Ratio: {:?}", compressed_size, original_size, compression_ratio);
 }
 
 #[test]

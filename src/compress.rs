@@ -1,8 +1,7 @@
 extern crate num;
+extern crate crossbeam;
 
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::thread;
 
 use codebook;
 
@@ -17,21 +16,20 @@ pub struct CompressionResult {
 // TODO: Output file layout. Header indicating number of blocks, offsets to them, offset to dictionary
 // [header][dictionary][block0][block1][block2][block3]
 
-// Why take in an Arc (atomic reference counted) codebook? https://www.reddit.com/r/rust/comments/2w75wr/how_do_i_read_immutable_vector_inside_a_spawned/coocmn7
-pub fn parallel_compress(input_string: &str, codebook: Arc<codebook::Codebook>, thread_count: usize) -> Vec<CompressionResult> {
-  let substrings = parallel_divide_work(thread_count, &input_string);
+pub fn parallel_compress(substrings: &Vec<&str>, codebook: &codebook::Codebook) -> Vec<CompressionResult> {
   let mut threads = vec![];
 
   for substring in substrings {
-    let owned_codebook = codebook.clone();
-    threads.push(thread::spawn(move || {
-      compress(&substring, &owned_codebook)
-    }));
+    crossbeam::scope(|scope| {
+      threads.push(scope.spawn(move|| {
+        compress(&substring, &codebook)
+      }));
+    });
   }
 
   let mut results = vec![];
   for thread in threads {
-    let result = thread.join().unwrap();
+    let result = thread.join();
 
     results.push(result);
   }
@@ -75,30 +73,6 @@ pub fn compress(input_string: &str, codebook: &codebook::Codebook) -> Compressio
   }
 }
 
-fn parallel_divide_work(thread_count: usize, input_string: &str) -> Vec<String> {
-  let thread_count = thread_count;
-  let input_string_length = input_string.len();
-  let length_per_thread = input_string_length / thread_count;
-
-  let mut substring_offsets = Vec::with_capacity(thread_count);
-
-  for cpu in 1..thread_count {
-    let offset = cpu * length_per_thread;
-    substring_offsets.push(offset);
-  }
-  substring_offsets.push(input_string_length);
-
-  let mut substrings = vec![];
-  let mut from = 0;
-
-  for substring_offset in substring_offsets {
-    substrings.push(input_string[from..substring_offset].to_string().to_owned());
-    from = substring_offset;
-  }
-
-  substrings
-}
-
 #[test]
 fn test_compress() {
   let mut char_map = HashMap::<char,String>::new();
@@ -139,14 +113,14 @@ fn test_parallel_compress() {
   char_map.insert('P', "100".to_string());
 
   let codebook = codebook::Codebook { character_map: char_map };
-  let check_codebook = codebook.clone();
+  let verify_codebook = codebook.clone();
 
-  let parallel_results = parallel_compress("MISSISSIPPI RIVER", Arc::new(codebook), 4);
+  let parallel_results = parallel_compress(&vec![&"MISS", &"ISSI", &"PPI ", &"RIVER"], &codebook);
 
-  let expecteds = vec![compress("MISS", &check_codebook),
-                       compress("ISSI", &check_codebook),
-                       compress("PPI ", &check_codebook),
-                       compress("RIVER", &check_codebook)];
+  let expecteds = vec![compress("MISS", &verify_codebook),
+                       compress("ISSI", &verify_codebook),
+                       compress("PPI ", &verify_codebook),
+                       compress("RIVER", &verify_codebook)];
 
   let mut i = 0;
   for expected in expecteds {

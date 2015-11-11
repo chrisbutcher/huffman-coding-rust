@@ -1,7 +1,12 @@
+extern crate num_cpus;
+extern crate crossbeam;
+
 use std::collections::HashMap;
 use std::collections::BinaryHeap;
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Less, Equal, Greater};
+
+use util;
 
 #[derive(Debug)]
 struct Node {
@@ -57,8 +62,8 @@ impl Clone for Codebook {
 }
 
 impl Codebook {
-  pub fn new(input: &str) -> Codebook {
-    let character_frequencies = map_chars_to_frequency(input);
+  pub fn new(input_strings: &Vec<&str>) -> Codebook {
+    let character_frequencies = parallel_map_chars_to_frequency(&input_strings);
     let mut priority_queue = build_priority_queue(&character_frequencies);
     let tree_root = build_tree(&mut priority_queue);
     let mut character_map = HashMap::<char,String>::new();
@@ -66,6 +71,27 @@ impl Codebook {
 
     Codebook { character_map: character_map}
   }
+}
+
+fn parallel_map_chars_to_frequency(substrings: &Vec<&str>) -> HashMap<char, usize> {
+  let mut threads = vec![];
+
+  for substring in substrings {
+    crossbeam::scope(|scope| {
+      threads.push(scope.spawn(move || {
+        map_chars_to_frequency(&substring)
+      }));
+    });
+  }
+
+  let mut results = vec![];
+  for thread in threads {
+    let result = thread.join();
+
+    results.push(result);
+  }
+
+  util::hash_map_reducer(results)
 }
 
 fn map_chars_to_frequency(input_string: &str) -> HashMap<char, usize> {
@@ -140,7 +166,7 @@ fn test_map_chars_to_frequency() {
 
 #[test]
 fn test_build_huffman_codebook() {
-  let codebook = Codebook::new("MISSISSIPPI RIVER");
+  let codebook = Codebook::new(&vec![&"MISSISSIPPI RIVER"]);
   assert_eq!(2, codebook.character_map[&'I'].len());
   assert_eq!(2, codebook.character_map[&'S'].len());
   assert_eq!(3, codebook.character_map[&'P'].len());
@@ -153,6 +179,6 @@ fn test_build_huffman_codebook() {
 
 #[test]
 fn test_build_huffman_codebook_with_one_letter() {
-  let codebook = Codebook::new("AAAAA");
+  let codebook = Codebook::new(&vec![&"AAAAA"]);
   assert_eq!(1, codebook.character_map[&'A'].len());
 }
