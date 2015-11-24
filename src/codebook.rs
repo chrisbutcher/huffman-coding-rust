@@ -8,6 +8,8 @@ use std::cmp::Ordering::{Less, Equal, Greater};
 
 use util;
 
+// Nodes are characters, weighted by character frequency
+
 #[derive(Debug)]
 struct Node {
   weight: usize,
@@ -25,6 +27,13 @@ struct Links {
   left: Box<Node>,
   right: Box<Node>
 }
+
+// https://doc.rust-lang.org/std/collections/struct.BinaryHeap.html
+// Nodes, including the root of the tree, must implement Ord,
+// to be able to act like a 'min heap'.
+
+// The Huffman algo requires that we build a weighted tree, and pop off pairs
+// of the two lowest-weight nodes at a time.
 
 impl Ord for Node {
   fn cmp(&self, other: &Node) -> Ordering {
@@ -55,23 +64,25 @@ pub struct Codebook {
   pub character_map: HashMap<char,String>
 }
 
-impl Clone for Codebook {
-    fn clone(&self) -> Codebook {
-      Codebook { character_map: self.character_map.clone() }
-    }
-}
-
 impl Codebook {
   pub fn new(input_strings: &Vec<&str>) -> Codebook {
     let character_frequencies = parallel_map_chars_to_frequency(&input_strings);
-    let mut priority_queue = build_priority_queue(&character_frequencies);
-    let tree_root = build_tree(&mut priority_queue);
+    let mut binary_heap = build_binary_heap(&character_frequencies);
+    let tree_root = build_tree(&mut binary_heap);
     let mut character_map = HashMap::<char,String>::new();
     build_codebook(&tree_root, &mut character_map, &"");
 
-    Codebook { character_map: character_map}
+    Codebook { character_map: character_map }
   }
 }
+
+// From https://github.com/aturon/crossbeam/blob/master/src/scoped.rs
+//
+// `spawn` is similar to the [`spawn`][spawn] function in Rust's standard library. The
+// difference is that this thread is scoped, meaning that it's guaranteed to terminate
+// before the current stack frame goes away, allowing you to reference the parent stack frame
+// directly. This is ensured by having the parent thread join on the child thread before the
+// scope exits.
 
 fn parallel_map_chars_to_frequency(substrings: &Vec<&str>) -> HashMap<char, usize> {
   let mut threads = vec![];
@@ -105,20 +116,20 @@ fn map_chars_to_frequency(input_string: &str) -> HashMap<char, usize> {
   chars_to_frequency
 }
 
-fn build_priority_queue(character_frequencies: &HashMap<char, usize>) -> BinaryHeap<Node> {
-  let mut priority_queue = BinaryHeap::<Node>::new();
+fn build_binary_heap(character_frequencies: &HashMap<char, usize>) -> BinaryHeap<Node> {
+  let mut binary_heap = BinaryHeap::<Node>::new();
   for (ch, freq) in character_frequencies.iter() {
     let node = Node { weight: *freq, data: NodeData::Leaf(*ch) };
-    priority_queue.push(node);
+    binary_heap.push(node);
   }
 
-  priority_queue
+  binary_heap
 }
 
-fn build_tree(priority_queue: &mut BinaryHeap<Node>) -> Node {
-  while priority_queue.len() > 1 {
-    let popped_1 = priority_queue.pop().unwrap();
-    let popped_2 = priority_queue.pop().unwrap();
+fn build_tree(binary_heap: &mut BinaryHeap<Node>) -> Node {
+  while binary_heap.len() > 1 {
+    let popped_1 = binary_heap.pop().unwrap();
+    let popped_2 = binary_heap.pop().unwrap();
 
     let combined_node = Node {
       weight: popped_1.weight + popped_2.weight,
@@ -127,10 +138,10 @@ fn build_tree(priority_queue: &mut BinaryHeap<Node>) -> Node {
         right: Box::new(popped_2),
       })
     };
-    priority_queue.push(combined_node);
+    binary_heap.push(combined_node);
   }
 
-  priority_queue.pop().unwrap()
+  binary_heap.pop().unwrap()
 }
 
 fn build_codebook(tree: &Node, codebook: &mut HashMap<char,String>, start_str: &str) {

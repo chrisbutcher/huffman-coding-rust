@@ -1,11 +1,16 @@
+// External crates, via Cargo.toml
 extern crate num_cpus;
 extern crate getopts;
 
+// https://doc.rust-lang.org/getopts/getopts/index.html
+
+// From std library
 use std::env;
 use std::io::prelude::*;
 use std::fs::File;
 use getopts::Options;
 
+// Internal modules
 mod codebook;
 mod compress;
 mod util;
@@ -20,6 +25,13 @@ fn read_file_to_string (filename: &str) -> String {
 
   let _ = file.read_to_string(&mut input_string);
   input_string
+}
+
+fn print_summary(compression_results: Vec<compress::CompressionResult>, original_size: usize) {
+  println!("Done! Threads used: {}", compression_results.len());
+  let compressed_size = compression_results.iter().fold(0, |acc, ref result|  acc + result.bytes.len());
+  let compression_ratio = compressed_size as f32 / original_size as f32;
+  println!("Compressed bytes size {:?}, from {:?}. Ratio: {:?}", compressed_size, original_size, compression_ratio);
 }
 
 fn main() {
@@ -45,17 +57,12 @@ fn main() {
 
   let input_substrings = util::string_to_substrings(&input_string, num_threads);
   let huffman_codebook = codebook::Codebook::new(&input_substrings);
-  let compressed_set = compress::parallel_compress(&input_substrings, &huffman_codebook);
-  println!("Done! Threads used: {}", compressed_set.len());
-
-  // let huffman_codebook = codebook::Codebook::new(vec![&input_string]);
-  // let compressed = compress::compress(&input_string, &huffman_codebook);
-  // let original_size = input_string.len() * 8;
-  // let compressed_size = compressed.bytes.len() * 8;
-  // let compression_ratio = compressed_size as f32 / original_size as f32;
-  // println!("Compressed bytes size {:?}, from {:?}. Ratio: {:?}", compressed_size, original_size, compression_ratio);
+  let compression_results = compress::parallel_compress(&input_substrings, &huffman_codebook);
+  
+  print_summary(compression_results, input_string.len());
 }
 
+// Running main in test, just to avoid test warning
 #[test]
 fn test_main() {
   main();

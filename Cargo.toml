@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["chris"]
 
 [dependencies]
-num = "*"
 num_cpus = "*"
 getopts = "0.2"
 crossbeam = "*"
