@@ -18,11 +18,16 @@ mod util;
 fn read_file_to_string (filename: &str) -> String {
   let mut input_string = String::new();
 
+  // match on Result, if I/O succeeded, access via Ok() which converts to Options
+  // Results succeed (Ok) or fail (Err)
+  // Options have values (Some) or do not (None)
+
   let mut file = match File::open(filename) {
     Ok(f) => f,
-    Err(_) => { panic!("Cannot open input file") }
+    Err(_) => { panic!("Cannot open input file") } // '_' for when a variable is returned, but not used, same as in go
   };
 
+  // Giving a method a mutable reference (unused return value is number of bytes read)
   let _ = file.read_to_string(&mut input_string);
   input_string
 }
@@ -47,7 +52,10 @@ fn main() {
   };
 
   let input_string = if option_matches.opt_present("f") {
-    let input_filename = option_matches.opt_str("f").unwrap().to_string();
+    let input_filename = match option_matches.opt_str("f") {
+      Some(filename) => filename.to_string(),
+      None => { panic!("-f option used but no file name specified!")  },
+    };
     read_file_to_string(&*input_filename)
   } else {
     "MISSISSIPPI RIVER".to_string()
@@ -58,7 +66,7 @@ fn main() {
   let input_substrings = util::string_to_substrings(&input_string, num_threads);
   let huffman_codebook = codebook::Codebook::new(&input_substrings);
   let compression_results = compress::parallel_compress(&input_substrings, &huffman_codebook);
-  
+
   print_summary(compression_results, input_string.len());
 }
 
